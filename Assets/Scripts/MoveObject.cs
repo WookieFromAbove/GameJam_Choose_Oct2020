@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.AccessControl;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class MoveObject : MonoBehaviour
 {
@@ -12,15 +14,13 @@ public class MoveObject : MonoBehaviour
     /// - block = length is 3x width, thickness is 1/5 length
     /// - random variations from dimmensions for difficulty
     /// </summary>
-    /// 
-
+   
     // click on block
     // move block with wasd
 
     [SerializeField]
     private GameObject _target;
     private Rigidbody _targetRB;
-    
 
     private float _horizontalInput;
     private float _verticalInput;
@@ -28,6 +28,18 @@ public class MoveObject : MonoBehaviour
     [SerializeField]
     private float _inputSpeed = 10f;
     private bool _isMoving = false;
+
+    [SerializeField]
+    private GameObject _coffinContainer;
+    private List<GameObject> _coffinList = new List<GameObject>();
+
+    private Vector3 _inputVector;
+    private bool _canMove = false;
+
+    private void Start()
+    {
+        VaryCoffinSize();
+    }
 
     private void Update()
     {
@@ -44,44 +56,54 @@ public class MoveObject : MonoBehaviour
 
                 _targetRB = _target.GetComponent<Rigidbody>();
                 _targetRB.useGravity = false;
-                //_targetRB.isKinematic = true;
             }
         }
 
         if (_target != null)
         {
-            //MoveBlock();
-            AddForce();
+            CalculateMovementInput();
         }
 
         if (Input.GetKeyDown(KeyCode.Space))
         {
+            _canMove = false;
+
             _targetRB.useGravity = true;
-            //_targetRB.isKinematic = false;
 
             _target = null;
         }
     }
 
-    private void AddForce()
+    private void FixedUpdate()
+    {
+        if (_canMove)
+        {
+            _targetRB.velocity = _inputVector;
+        }
+    }
+
+    private void VaryCoffinSize()
+    {
+        var coffins = GameObject.FindGameObjectsWithTag("Coffin");
+
+        foreach (var coffin in coffins)
+        {
+            float randomVariance = Random.Range(0.99f, 1.01f);
+
+            var coffinScale = coffin.transform.localScale;
+            coffinScale.y *= randomVariance;
+
+            coffin.transform.localScale = coffinScale;
+
+            _coffinList.Add(coffin);
+        }
+    }
+
+    private void CalculateMovementInput()
     {
         _isMoving = false;
 
-        if (Input.GetKey(KeyCode.W)) // up
-        {
-            _isMoving = true;
-            _verticalInput = 1f;
-        }
-        else if (Input.GetKey(KeyCode.S)) // down
-        {
-            _isMoving = true;
-            _verticalInput = -1f;
-        }
-        else
-        {
-            _verticalInput = 0f;
-        }
-
+        // horizontal input
         if (Input.GetKey(KeyCode.A)) // forward
         {
             _isMoving = true;
@@ -97,6 +119,23 @@ public class MoveObject : MonoBehaviour
             _horizontalInput = 0f;
         }
 
+        // vertical input
+        if (Input.GetKey(KeyCode.W)) // up
+        {
+            _isMoving = true;
+            _verticalInput = 1f;
+        }
+        else if (Input.GetKey(KeyCode.S)) // down
+        {
+            _isMoving = true;
+            _verticalInput = -1f;
+        }
+        else
+        {
+            _verticalInput = 0f;
+        }
+
+        // side input
         if (Input.GetKey(KeyCode.Q)) // left
         {
             _isMoving = true;
@@ -114,57 +153,18 @@ public class MoveObject : MonoBehaviour
 
         if (_isMoving)
         {
-            var moveDirection = new Vector3(_horizontalInput, _verticalInput, _sideInput);
-            var velocity = moveDirection * _inputSpeed;
-
-            _targetRB.AddForce(velocity);
-
-            //ReachVelocity(_targetRB, velocity, 10);
+            _inputVector = new Vector3(_horizontalInput * 10f, _verticalInput * 10f, _sideInput * 10f);
         }
         else
         {
+            _inputVector = Vector3.zero;
             _targetRB.velocity = Vector3.zero;
             _targetRB.angularVelocity = Vector3.zero;
         }
-    }
 
-    private void ReachVelocity(Rigidbody rb, Vector3 velocity, float force = 1, ForceMode mode = ForceMode.Force)
-    {
-        if (force == 0 || velocity.magnitude == 0)
+        if (!_canMove)
         {
-            return;
+            _canMove = true;
         }
-
-        velocity = velocity + velocity.normalized * 0.2f * rb.drag;
-        force = Mathf.Clamp(force, -rb.mass / Time.fixedDeltaTime, rb.mass / Time.fixedDeltaTime);
-
-        if (rb.velocity.magnitude == 0)
-        {
-            rb.AddForce(velocity * force, mode);
-        }
-        else
-        {
-            var velocityToTarget = (velocity.normalized * Vector3.Dot(velocity, rb.velocity) / velocity.magnitude);
-            rb.AddForce((velocity - velocityToTarget) * force, mode);
-        }
-    }
-
-    private void MoveBlock()
-    {
-        _horizontalInput = Input.GetAxis("Horizontal");
-        _verticalInput = Input.GetAxis("Vertical");
-        _sideInput = 0f;
-
-        if (Input.GetKey(KeyCode.Q))
-        {
-            _sideInput = -1;
-        }
-        else if (Input.GetKey(KeyCode.E))
-        {
-            _sideInput = 1f;
-        }
-
-        Vector3 direction = new Vector3(_horizontalInput, _verticalInput, _sideInput);
-        transform.Translate(direction * _inputSpeed * Time.deltaTime);
     }
 }
