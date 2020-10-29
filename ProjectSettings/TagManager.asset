@@ -6,6 +6,7 @@ TagManager:
   tags:
   - Block
   - Coffin
+  - Plane
   layers:
   - Default
   - TransparentFX
