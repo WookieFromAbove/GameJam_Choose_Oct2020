@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Assertions.Must;
 
 public class CoffinBehavior : MonoBehaviour
 {
@@ -10,8 +11,10 @@ public class CoffinBehavior : MonoBehaviour
     private Vector3 _startPos;
     private Vector3 _currentPos;
 
-    private float _maxDistancce = 2.5f;
+    private float _maxDistancce = 3.5f;
     private float _currentDistance;
+
+    private WaitForSeconds _destroyWait = new WaitForSeconds(2.5f);
 
     private void Start()
     {
@@ -30,12 +33,10 @@ public class CoffinBehavior : MonoBehaviour
             _currentPos = transform.position;
 
             _currentDistance = Vector3.Distance(_startPos, _currentPos);
-            //Debug.Log("Distance: " + _currentDistance);
 
             if (_currentDistance > _maxDistancce)
             {
                 GameManager.Instance.GameOver();
-                Debug.Log("Tower Failure!");
             }
         }        
     }
@@ -45,7 +46,6 @@ public class CoffinBehavior : MonoBehaviour
         if (_isOut == true && other.CompareTag("Plane"))
         {
             _isOut = false;
-            Debug.Log("Coffin is NOT out!");
         }
     }
 
@@ -54,7 +54,17 @@ public class CoffinBehavior : MonoBehaviour
         if (other.CompareTag("Plane"))
         {
             _isOut = true;
-            Debug.Log("Coffin is out!");
         }
+    }
+
+    public IEnumerator DestroyRoutine()
+    {
+        CoffinContainer.Instance.RemoveFromList(this.gameObject);
+
+        yield return _destroyWait;
+
+        AudioManager.Instance.PlayZombieClip(0);
+
+        Destroy(this.gameObject);
     }
 }

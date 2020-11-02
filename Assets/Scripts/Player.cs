@@ -1,4 +1,5 @@
-﻿using System;
+﻿//using GameDevHQ.Filebase.DataModels;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,44 +10,45 @@ using Random = UnityEngine.Random;
 public class Player : MonoBehaviour
 {
     /// <summary>
-    /// Jenga
     /// - 54 blocks
     /// - block = length is 3x width, thickness is 1/5 length
     /// - randomize dimmensions for difficulty
     /// </summary>
-   
-    // click on block
-    // move block with wasdqe
-
+    
+    // target obj
     [SerializeField]
     private GameObject _target;
     private CoffinBehavior _targetBehavior;
     private Rigidbody _targetRB;
-    private Vector3 _targetPos;
+    private Material _targetMaterial;
+    private Renderer[] _targetChildRenderers;
+    private GameObject _targetParent;
+    private GameObject _currentParent;
 
+    // inputs
     private float _horizontalInput;
     private float _verticalInput;
     private float _sideInput;
     [SerializeField]
     private float _inputSpeed = 5f;
-    private bool _isMoving = false;
-
-    [SerializeField]
-    private GameObject _coffinContainer;
-    private List<GameObject> _coffinList = new List<GameObject>();
-
     private Vector3 _inputVector;
+    private bool _isMoving = false;
+    private bool _hasMoved = false;
     private bool _canMove = false;
     private bool _canDrop = false;
 
+    private string _baseColor = "_BaseColor";
+    private Color _defaultColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+    private Color _selectedColor = Color.red;
+
     private void Start()
     {
-        VaryCoffinSize();
+        _target = null;
     }
 
     private void Update()
     {
-        if (Input.GetMouseButtonDown(0))
+        if (_target == null || _hasMoved == false)
         {
             CalculateTarget();
         }
@@ -57,7 +59,7 @@ public class Player : MonoBehaviour
             CalculateDrop();
         }
 
-        if (GameManager.Instance._towerFailure)
+        if (GameManager.Instance._gameOver)
         {
             _canMove = false;
         }
@@ -71,43 +73,83 @@ public class Player : MonoBehaviour
         }
     }
 
-    private void VaryCoffinSize()
+    private void CalculateTarget()
     {
-        var coffins = GameObject.FindGameObjectsWithTag("Coffin");
-
-        foreach (var coffin in coffins)
+        if (Input.GetMouseButtonDown(0))
         {
-            float randomVariance = Random.Range(0.99f, 1.01f);
+            if (!GameManager.Instance._starting)
+            {
+                UIManager.Instance.ToggleGameIntroPanel();
+                GameManager.Instance._starting = true;
+                AudioManager.Instance.PlayGameBackgroundAudio();
+                AudioManager.Instance.StartZombieGroanRoutine();
+            }
 
-            var coffinScale = coffin.transform.localScale;
-            coffinScale.y *= randomVariance;
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            RaycastHit hitInfo;
 
-            coffin.transform.localScale = coffinScale;
-
-            _coffinList.Add(coffin);
+            if (Physics.Raycast(ray.origin, ray.direction * 10, out hitInfo))
+            {
+                if (hitInfo.collider.CompareTag("Coffin"))
+                {
+                    AssignTarget(hitInfo);
+                }
+            }
         }
     }
 
-    private void CalculateTarget()
+    private void AssignTarget(RaycastHit target)
     {
-        _target = null;
-
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        RaycastHit hitInfo;
-
-        if (Physics.Raycast(ray.origin, ray.direction * 10, out hitInfo))
+        if (_target != null)
         {
-            if (hitInfo.collider.CompareTag("Coffin"))
-            {
-                _target = hitInfo.collider.gameObject;
-                Debug.Log(_target.name + " selected!");
+            ResetTarget();
 
-                _targetBehavior = _target.GetComponent<CoffinBehavior>();
-                _targetBehavior._isSelected = true;
-                
-                _targetRB = _target.GetComponent<Rigidbody>();
-                _targetRB.useGravity = false;
+            _target = null;
+        }
+
+        _target = target.collider.gameObject;
+        Debug.Log(_target.name + " selected!");
+
+        _targetParent = _target.transform.parent.gameObject;
+        Debug.Log(_target.transform.parent);
+
+        if (_currentParent == _targetParent)
+        {
+            _target = null;
+
+            return;
+        }
+        else
+        {
+            _targetBehavior = _target.GetComponent<CoffinBehavior>();
+            _targetBehavior._isSelected = true;
+
+            _targetRB = _target.GetComponent<Rigidbody>();
+            _targetRB.useGravity = false;
+
+            _targetMaterial = _target.GetComponent<Renderer>().material;
+            _targetMaterial.SetColor(_baseColor, _selectedColor);
+
+            _targetChildRenderers = _target.GetComponentsInChildren<Renderer>();
+            foreach (Renderer renderer in _targetChildRenderers)
+            {
+                renderer.material.SetColor(_baseColor, _selectedColor);
             }
+            
+            
+        }
+    }
+
+    private void ResetTarget()
+    {
+        _canMove = false;
+        _canDrop = false;
+
+        _targetRB.useGravity = true;
+        _targetMaterial.SetColor(_baseColor, _defaultColor);
+        foreach (Renderer renderer in _targetChildRenderers)
+        {
+            renderer.material.SetColor(_baseColor, _defaultColor);
         }
     }
 
@@ -115,45 +157,36 @@ public class Player : MonoBehaviour
     {
         _isMoving = false;
 
+        _horizontalInput = Input.GetAxis("Horizontal");
+        _verticalInput = Input.GetAxis("Vertical");
+
         // horizontal input
-        if (Input.GetKey(KeyCode.A)) // forward
+        if (Input.GetKey(KeyCode.A)) 
         {
             _isMoving = true;
-            _horizontalInput = 1f;
         }
-        else if (Input.GetKey(KeyCode.D)) // back
+        else if (Input.GetKey(KeyCode.D)) 
         {
             _isMoving = true;
-            _horizontalInput = -1f;
-        }
-        else
-        {
-            _horizontalInput = 0f;
         }
 
         // vertical input
-        if (Input.GetKey(KeyCode.W)) // up
+        if (Input.GetKey(KeyCode.W)) 
         {
             _isMoving = true;
-            _verticalInput = 1f;
         }
-        else if (Input.GetKey(KeyCode.S)) // down
+        else if (Input.GetKey(KeyCode.S)) 
         {
             _isMoving = true;
-            _verticalInput = -1f;
-        }
-        else
-        {
-            _verticalInput = 0f;
         }
 
         // side input
-        if (Input.GetKey(KeyCode.Q)) // left
+        if (Input.GetKey(KeyCode.Q)) 
         {
             _isMoving = true;
             _sideInput = -1;
         }
-        else if (Input.GetKey(KeyCode.E)) // right
+        else if (Input.GetKey(KeyCode.E)) 
         {
             _isMoving = true;
             _sideInput = 1f;
@@ -165,6 +198,11 @@ public class Player : MonoBehaviour
 
         if (_isMoving)
         {
+            if (_hasMoved == false)
+            {
+                _hasMoved = true;
+            }
+
             _inputVector = new Vector3(_horizontalInput * _inputSpeed, _verticalInput * _inputSpeed, _sideInput * _inputSpeed);
         }
         else
@@ -182,7 +220,7 @@ public class Player : MonoBehaviour
 
     private void CalculateDrop()
     {
-        if (!GameManager.Instance._towerFailure && _targetBehavior._isOut)
+        if (!GameManager.Instance._gameOver && _targetBehavior._isOut)
         {
             if (!_canDrop)
             {
@@ -191,14 +229,17 @@ public class Player : MonoBehaviour
                 UIManager.Instance.ToggleFeedNotification();
             }
 
-            if (Input.GetKeyDown(KeyCode.Space))
+            if (Input.GetKeyDown(KeyCode.F))
             {
-                _canMove = false;
-                _canDrop = false;
+                ResetTarget();
 
-                _targetRB.useGravity = true;
+                StartCoroutine(_targetBehavior.DestroyRoutine());
+
+                _currentParent = _targetParent;
 
                 _target = null;
+
+                _hasMoved = false;
 
                 UIManager.Instance.ToggleFeedNotification();
                 UIManager.Instance.UpdateSoulsRemaining();
@@ -214,10 +255,5 @@ public class Player : MonoBehaviour
                 UIManager.Instance.ToggleFeedNotification();
             }
         }
-
-        // wait to see if tower failure & over feeding area
-        // if tower failure
-
-        
     }
 }
